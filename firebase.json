@@ -1,0 +1,48 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "onder-lift",
+          "appId": "1:331154362575:android:eed2fe861dbded399fa7ba",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "onder-lift",
+          "configurations": {
+            "android": "1:331154362575:android:eed2fe861dbded399fa7ba",
+            "ios": "1:331154362575:ios:afc39a228a3f73b49fa7ba",
+            "macos": "1:331154362575:ios:afc39a228a3f73b49fa7ba",
+            "web": "1:331154362575:web:37a4c2467935960c9fa7ba",
+            "windows": "1:331154362575:web:521561ddf29a21609fa7ba"
+          }
+        }
+      }
+    }
+  },
+  "database": {
+    "rules": "  "
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ],
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" run lint"
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

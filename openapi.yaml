@@ -1,0 +1,9 @@
+swagger: '2.0'
+info:
+  title: My API
+  description: My API Description
+  version: 1.0.0
+host: onder-lift.appspot.com
+x-google-endpoints:
+  - name: onder-lift.appspot.com
+    target: 34.136.128.146

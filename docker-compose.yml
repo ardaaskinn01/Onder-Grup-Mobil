@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  portainer:
+    image: portainer/portainer
+    ports:
+      - "9002:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "81:81"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./public:/usr/share/nginx/html:ro
+    networks:
+      - app-network
+
+  mysql-container:
+    image: mysql:latest
+    restart: always
+    environment:
+      MYSQL_ROOT_USER: root
+      MYSQL_ROOT_PASSWORD: ondergrup450
+      MYSQL_DATABASE: mydb
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app-network
+
+  nodeapp:
+    build:
+      context: ./nodeapp
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_HOST: mysql-container
+      DATABASE_USER: root
+      DATABASE_PASSWORD: ondergrup450
+      DATABASE_NAME: mydb
+      DATABASE_PORT: 3306
+      MINIO_ENDPOINT: minio
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    depends_on:
+      - mysql-container
+      - minio
+    networks:
+      - app-network
+    command: [ "sh", "-c", "/usr/local/bin/wait-for-it.sh mysql-container:3306 -- npm start" ]
+
+  minio:
+    image: minio/minio
+    command: minio server --console-address ":9090" /data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9001:9001"
+      - "9090:9090"
+    volumes:
+      - minio_data:/data
+    networks:
+      - app-network
+
+  phpmyadmin:
+      image: phpmyadmin/phpmyadmin:latest
+      restart: always
+      ports:
+        - "8080:80"
+      environment:
+        PMA_HOST: mysql-container
+        MYSQL_ROOT_PASSWORD: ondergrup450
+      depends_on:
+        - mysql-container
+      networks:
+        - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  minio_data:
