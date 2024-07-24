@@ -24,9 +24,9 @@ services:
     image: mysql:latest
     restart: always
     environment:
-      MYSQL_ROOT_USER: root
-      MYSQL_ROOT_PASSWORD: ondergrup450
-      MYSQL_DATABASE: mydb
+      MYSQL_ROOT_USER: process.env.DATABASE_NAME
+      MYSQL_ROOT_PASSWORD: process.env.DATABASE_PASSWORD
+      MYSQL_DATABASE: process.env.DATABASE_NAME
     ports:
       - "3308:3306"
     volumes:
@@ -54,7 +54,10 @@ services:
       - minio
     networks:
       - app-network
-    command: [ "sh", "-c", "/usr/local/bin/wait-for-it.sh mysql-container:3306 -- npm start" ]
+    command: ["sh", "-c", "/usr/local/bin/wait-for-it.sh mysql-container:3306 -- ./swagger_update.sh && npm start"]
+    volumes:
+      - ./nodeapp/swagger.json:/usr/src/app/swagger.json  # Doğru path
+      - ./nodeapp/swagger_update.sh:/usr/src/app/swagger_update.sh  # script dosyasını da ekleyin
 
   minio:
     image: minio/minio
@@ -71,17 +74,17 @@ services:
       - app-network
 
   phpmyadmin:
-      image: phpmyadmin/phpmyadmin:latest
-      restart: always
-      ports:
-        - "8080:80"
-      environment:
-        PMA_HOST: mysql-container
-        MYSQL_ROOT_PASSWORD: ondergrup450
-      depends_on:
-        - mysql-container
-      networks:
-        - app-network
+    image: phpmyadmin/phpmyadmin:latest
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql-container
+      MYSQL_ROOT_PASSWORD: ondergrup450
+    depends_on:
+      - mysql-container
+    networks:
+      - app-network
 
 networks:
   app-network:
