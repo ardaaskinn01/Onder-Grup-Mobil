@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:onderliftmobil/firebase_options.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:firebase_core/firebase_core.dart';
