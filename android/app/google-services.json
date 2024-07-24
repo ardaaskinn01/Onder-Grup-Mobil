@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "331154362575",
+    "project_id": "onder-lift",
+    "storage_bucket": "onder-lift.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:331154362575:android:eed2fe861dbded399fa7ba",
+        "android_client_info": {
+          "package_name": "com.example.onderliftmobil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5uIM44Bet8d5dAfXNnPa1wpKDSc1Re-4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
