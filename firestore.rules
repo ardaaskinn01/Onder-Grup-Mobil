@@ -1,9 +1,0 @@
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Herkese veri okuma ve yazma izni ver
-    match /{document=**} {
-      allow read, write, delete;
-    }
-  }
-}
