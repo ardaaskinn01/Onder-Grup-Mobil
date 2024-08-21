@@ -2,12 +2,18 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:onderliftmobil/pages/adminpanel.dart';
 import 'package:onderliftmobil/pages/login.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'languageprovider.dart';
+import 'package:qr_code_scanner/qr_code_scanner.dart';
 
 import 'bakim.dart';
 import 'hata.dart';
+
+final storage = FlutterSecureStorage();
 
 String getCurrentDatetimeForMysql() {
   DateTime now = DateTime.now();
@@ -15,6 +21,10 @@ String getCurrentDatetimeForMysql() {
   return formatter.format(now);
 }
 
+Future<String?> _getUsername() async {
+  String? username = await storage.read(key: 'username');
+  return username;
+}
 
 class AnaSayfa extends StatefulWidget {
   @override
@@ -33,18 +43,36 @@ class MachineListScreen extends StatefulWidget {
 class _MachineListScreenState extends State<MachineListScreen> {
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Makineleri Seçin'),
+        title: Text(
+          languageProvider.selectedLanguage == 'Türkçe'
+              ? 'Makineleri Seçin'
+              : 'Choose the Machine',
+        ),
       ),
       body: FutureBuilder(
         future: fetchMachines(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return Center(child: CircularProgressIndicator());
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text('Hata: ${snapshot.error}'));
           }
 
           final machines = snapshot.data as List<dynamic>;
+
+          if (machines.isEmpty) {
+            return Center(
+                child: Text(
+              languageProvider.selectedLanguage == 'Türkçe'
+                  ? 'Veri Bulunamadı'
+                  : 'Data has Not Found',
+            ));
+          }
 
           return ListView.builder(
             itemCount: machines.length,
@@ -56,32 +84,34 @@ class _MachineListScreenState extends State<MachineListScreen> {
               return Column(
                 children: [
                   ListTile(
-                    leading: Icon(Icons.precision_manufacturing),
+                    leading: const Icon(Icons.precision_manufacturing),
                     title: Text(
                       machine['machineName'],
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Machine Type: $machineType',
-                          style: TextStyle(fontSize: 12),
+                          '${languageProvider.selectedLanguage == 'Türkçe' ? 'Makine Türü' : 'Machine Type'}: $machineType',
+                          style: const TextStyle(fontSize: 12),
                         ),
                         Text(
-                          'Machine ID: $machineId',
-                          style: TextStyle(fontSize: 12),
+                          '${languageProvider.selectedLanguage == 'Türkçe' ? "Makine ID'si" : 'Machine ID'}: $machineId',
+                          style: const TextStyle(fontSize: 12),
                         ),
                       ],
                     ),
                     onTap: () {
-                      int id = int.tryParse(widget.id) ?? -1; // `id` değerini int'e dönüştür
+                      int id = int.tryParse(widget.id) ??
+                          -1; // `id` değerini int'e dönüştür
                       switch (id) {
                         case 0:
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => BakimPopUp(machineID: machine['machineID']),
+                              builder: (context) => BakimPopUp(
+                                  machineID: machine['machineID'].toString()),
                             ),
                           );
                           break;
@@ -89,7 +119,8 @@ class _MachineListScreenState extends State<MachineListScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => BakimScreen(machineID: machine['machineID']),
+                              builder: (context) => BakimScreen(
+                                  machineID: machine['machineID'].toString()),
                             ),
                           );
                           break;
@@ -97,16 +128,17 @@ class _MachineListScreenState extends State<MachineListScreen> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => HataScreen(machineID: machine['machineID']),
+                              builder: (context) => HataScreen(
+                                  machineID: machine['machineID'].toString()),
                             ),
                           );
                           break;
                         default:
-                          print('Unknown id: $id'); // Tanımlı olmayan id'ler için hata mesajı
+                        // Tanımlı olmayan id'ler için hata mesajı
                       }
                     },
                   ),
-                  Divider(), // Adds a horizontal line between items
+                  const Divider(), // Adds a horizontal line between items
                 ],
               );
             },
@@ -117,10 +149,10 @@ class _MachineListScreenState extends State<MachineListScreen> {
   }
 
   Future<List<dynamic>> fetchMachines() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
+    String? token = await storage.read(key: 'token');
     try {
-      final url = Uri.parse('http://10.0.2.2:3000/api/machines/list'); // Express.js server adresine göre güncelleyin
+      final url = Uri.parse(
+          'https://ondergrup.hidirektor.com.tr/api/v2/authorized/getAllMachines'); // Express.js server adresine göre güncelleyin
       final response = await http.get(
         url,
         headers: {
@@ -135,7 +167,6 @@ class _MachineListScreenState extends State<MachineListScreen> {
         throw Exception('Failed to load machines');
       }
     } catch (e) {
-      print('Error fetching machines: $e');
       throw Exception('Error occurred while fetching machines: $e');
     }
   }
@@ -153,8 +184,10 @@ class BakimPopUp extends StatefulWidget {
 class _BakimPopUpState extends State<BakimPopUp> {
   TextEditingController maintenanceIdController = TextEditingController();
   TextEditingController maintenanceDateController = TextEditingController();
-  List<TextEditingController> noteControllers = List.generate(10, (index) => TextEditingController());
-  List<String> maintenanceStatuses = List.generate(36, (index) => "1");
+  List<TextEditingController> noteControllers =
+      List.generate(10, (index) => TextEditingController());
+  List<String> maintenanceStatuses = List.generate(34, (index) => "1");
+  List<List<String>> sectionMaintenanceStatuses = List.generate(8, (_) => List<String>.filled(34, '1'));
   int? selectedState;
 
   @override
@@ -164,55 +197,53 @@ class _BakimPopUpState extends State<BakimPopUp> {
 
   Future<void> addMaintenanceToDatabase() async {
     // Otomatik tarihi al ve formatla
-    print(noteControllers);
     String formattedDate = getCurrentDatetimeForMysql();
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
+    String? token = await storage.read(key: 'token');
     // JSON yapısını oluşturun
     Map<String, dynamic> data = {
       'machineID': widget.machineID,
-      'maintenanceId': maintenanceIdController.text,
-      'maintenanceDate': formattedDate, // Otomatik tarih kullanılıyor
       'maintenanceStatuses': maintenanceStatuses,
       'notes': noteControllers.map((controller) => controller.text).toList(),
     };
 
-    final Uri uri = Uri.parse('http://10.0.2.2:3000/api/maintenance/add');
+    final Uri uri =
+        Uri.parse('https://ondergrup.hidirektor.com.tr/api/v2/authorized/createMaintenance');
 
-    try {
-      final response = await http.post(
-        uri,
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json', // İçerik türü başlığı ekleniyor
-        },
-        body: json.encode(data), // JSON yapısını body'ye ekleyin
-      );
+    final response = await http.post(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json', // İçerik türü başlığı ekleniyor
+      },
+      body: json.encode(data), // JSON yapısını body'ye ekleyin
+    );
 
-      print(response.statusCode);
-      if (response.statusCode == 201) {
-        print('Maintenance added successfully!');
-        Navigator.of(context).pop(); // Dialog'u kapatın
-      } else {
-        print('Error adding maintenance: ${response.body}');
-      }
-    } catch (e) {
-      print('Error adding maintenance: $e');
-    }
+    if (response.statusCode == 201) {
+      Navigator.of(context).pop(); // Dialog'u kapatın
+    } else {}
   }
 
   void showAddMaintenancesDialog() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Yeni Bakım Ekle'),
+          title: Text(
+            languageProvider.selectedLanguage == 'Türkçe'
+                ? 'Yeni Bakım Ekle'
+                : 'Add New Maintenance',
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: maintenanceIdController,
-                decoration: InputDecoration(hintText: 'Bakım ID'),
+                decoration: InputDecoration(
+                  hintText: languageProvider.selectedLanguage == 'Türkçe'
+                      ? "Bakım ID'si"
+                      : 'Maintenance ID',
+                ),
               ),
             ],
           ),
@@ -221,13 +252,19 @@ class _BakimPopUpState extends State<BakimPopUp> {
               onPressed: () {
                 addMaintenanceToDatabase();
               },
-              child: Text('Ekle'),
+              child: Text(
+                languageProvider.selectedLanguage == 'Türkçe' ? 'Ekle' : 'Add',
+              ),
             ),
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Close the dialog
               },
-              child: Text('İptal'),
+              child: Text(
+                languageProvider.selectedLanguage == 'Türkçe'
+                    ? 'İptal'
+                    : 'Cancel',
+              ),
             ),
           ],
         );
@@ -237,9 +274,14 @@ class _BakimPopUpState extends State<BakimPopUp> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Bakım Kaydı Oluştur'),
+        title: Text(
+          languageProvider.selectedLanguage == 'Türkçe'
+              ? 'Bakım Kaydı Oluştur'
+              : 'Create Maintenance Log',
+        ),
         leading: IconButton(
           icon: Icon(Icons.arrow_back),
           onPressed: () => Navigator.of(context).pop(),
@@ -252,7 +294,8 @@ class _BakimPopUpState extends State<BakimPopUp> {
             children: [
               buildButtonGrid(),
               if (selectedState != null)
-                fillTableWithData(selectedState!, getDataForState(selectedState!)),
+                fillTableWithData(
+                    selectedState!, getDataForState(selectedState!)),
             ],
           ),
         ),
@@ -267,7 +310,9 @@ class _BakimPopUpState extends State<BakimPopUp> {
             showAddMaintenancesDialog();
           },
           child: Text(
-            'Create Maintenance Log',
+            languageProvider.selectedLanguage == 'Türkçe'
+                ? 'Bakım Kaydı Oluştur'
+                : 'Create Maintenance Log',
             style: TextStyle(color: Colors.white), // Button text color
           ),
         ),
@@ -276,20 +321,33 @@ class _BakimPopUpState extends State<BakimPopUp> {
   }
 
   Widget buildButtonGrid() {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Column(
       children: [
         Row(
           children: [
             Expanded(
-              child: buildSectionButton('Fonksiyonlar ve Kontrol', 1),
+              child: buildSectionButton(
+                  languageProvider.selectedLanguage == 'Türkçe'
+                      ? 'Fonksiyonlar ve Kontrol'
+                      : 'Functions and Control',
+                  1),
             ),
             SizedBox(width: 8),
             Expanded(
-              child: buildSectionButton('Platform Montaj', 2),
+              child: buildSectionButton(
+                  languageProvider.selectedLanguage == 'Türkçe'
+                      ? 'Platform ve Montaj'
+                      : 'Platform and Assembly',
+                  2),
             ),
             SizedBox(width: 8),
             Expanded(
-              child: buildSectionButton('Makaslar', 3),
+              child: buildSectionButton(
+                  languageProvider.selectedLanguage == 'Türkçe'
+                      ? 'Makaslar'
+                      : 'Scissors',
+                  3),
             ),
           ],
         ),
@@ -297,15 +355,27 @@ class _BakimPopUpState extends State<BakimPopUp> {
         Row(
           children: [
             Expanded(
-              child: buildSectionButton('Genel', 4),
+              child: buildSectionButton(
+                  languageProvider.selectedLanguage == 'Türkçe'
+                      ? 'Genel'
+                      : 'General',
+                  4),
             ),
             SizedBox(width: 8),
             Expanded(
-              child: buildSectionButton('Hidrolik', 5),
+              child: buildSectionButton(
+                  languageProvider.selectedLanguage == 'Türkçe'
+                      ? 'Hidrolik'
+                      : 'Hydrolic',
+                  5),
             ),
             SizedBox(width: 8),
             Expanded(
-              child: buildSectionButton('Elektrik', 6),
+              child: buildSectionButton(
+                  languageProvider.selectedLanguage == 'Türkçe'
+                      ? 'Elektrik'
+                      : 'Electricity',
+                  6),
             ),
           ],
         ),
@@ -313,15 +383,27 @@ class _BakimPopUpState extends State<BakimPopUp> {
         Row(
           children: [
             Expanded(
-              child: buildSectionButton('Kılavuz ve Etiket', 7),
+              child: buildSectionButton(
+                  languageProvider.selectedLanguage == 'Türkçe'
+                      ? 'Kılavuz ve Etiket'
+                      : 'Guideline and Label',
+                  7),
             ),
             SizedBox(width: 8),
             Expanded(
-              child: buildSectionButton('Şase', 8),
+              child: buildSectionButton(
+                  languageProvider.selectedLanguage == 'Türkçe'
+                      ? 'Şase'
+                      : 'Chassis',
+                  8),
             ),
             SizedBox(width: 8),
             Expanded(
-              child: buildSectionButton('Açıklama Notu', 9),
+              child: buildSectionButton(
+                  languageProvider.selectedLanguage == 'Türkçe'
+                      ? 'Açıklama Notu'
+                      : 'Explanatory Note ',
+                  9),
             ),
           ],
         ),
@@ -351,238 +433,291 @@ class _BakimPopUpState extends State<BakimPopUp> {
   }
 
   Widget fillTableWithData(int section, List<String> data) {
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.all(8.0),
-          child: Text(
-            'Section $section',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF222F5A),
+    return Consumer<LanguageProvider>(
+      builder: (context, languageProvider, child) {
+        return Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Text(
+                '${languageProvider.getLocalizedString('category')} $section',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF222F5A),
+                ),
+              ),
             ),
-          ),
-        ),
-        Table(
-          columnWidths: {
-            0: FlexColumnWidth(2),
-            1: FlexColumnWidth(1),
-          },
-          border: TableBorder.all(
-            color: Colors.grey,
-          ),
-          children: List<TableRow>.generate(
-            data.length,
-                (index) {
-              if (section < 9) {
-                int calculatedIndex = (section - 1) * 4 + index;
-                if (calculatedIndex < maintenanceStatuses.length) {
-                  return TableRow(
-                    children: [
-                      TableCell(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            data[index],
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                      ),
-                      TableCell(
-                        child: Center(
-                          child: DropdownButton<String>(
-                            value: maintenanceStatuses[calculatedIndex],
-                            items: [
-                              DropdownMenuItem(
-                                value: "1",
-                                child: Text("Tamam"),
+            Table(
+              columnWidths: {
+                0: FlexColumnWidth(2),
+                1: FlexColumnWidth(1),
+              },
+              border: TableBorder.all(
+                color: Colors.grey,
+              ),
+              children: List<TableRow>.generate(
+                data.length,
+                    (index) {
+                  if (section == 9) {
+                    // Eğer section 9 ise, not girişi için TextField döndür
+                    return TableRow(
+                      children: [
+                        TableCell(
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Text(
+                              data[index],
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.black,
                               ),
-                              DropdownMenuItem(
-                                value: "2",
-                                child: Text("Hatalı"),
+                            ),
+                          ),
+                        ),
+                        TableCell(
+                          child: Center(
+                            child: TextField(
+                              controller: noteControllers[index],
+                              decoration: InputDecoration(
+                                hintText: languageProvider.getLocalizedString('enterNote'),
                               ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                maintenanceStatuses[calculatedIndex] = value!;
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                } else {
-                  // Index out of bounds, handle accordingly.
-                  return TableRow(
-                    children: [
-                      TableCell(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Text(
-                            'Invalid index',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.red,
                             ),
                           ),
                         ),
-                      ),
-                      TableCell(
-                        child: Center(
-                          child: Text(
-                            'Invalid',
-                            style: TextStyle(
-                              color: Colors.red,
+                      ],
+                    );
+                  } else {
+                    // Diğer sectionlar için index hesaplaması
+                    int baseIndex = 0;
+
+                    // Sectiona göre baseIndex hesaplama
+                    if (section == 1) baseIndex = 0;
+                    else if (section == 2) baseIndex = 4;
+                    else if (section == 3) baseIndex = 8;
+                    else if (section == 4) baseIndex = 14;
+                    else if (section == 5) baseIndex = 20;
+                    else if (section == 6) baseIndex = 26;
+                    else if (section == 7) baseIndex = 29;
+                    else if (section == 8) baseIndex = 31;
+
+                    int calculatedIndex = baseIndex + index;
+
+                    if (calculatedIndex < maintenanceStatuses.length) {
+                      return TableRow(
+                        children: [
+                          TableCell(
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Text(
+                                data[index],
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                    ],
-                  );
-                }
-              } else if (section == 9) {
-                // Note section
-                return TableRow(
-                  children: [
-                    TableCell(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          data[index],
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.black,
+                          TableCell(
+                            child: Center(
+                              child: DropdownButton<String>(
+                                value: maintenanceStatuses[calculatedIndex],
+                                items: [
+                                  DropdownMenuItem(
+                                    value: "1",
+                                    child: Text(languageProvider.getLocalizedString('complete')),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: "2",
+                                    child: Text(languageProvider.getLocalizedString('faulty')),
+                                  ),
+                                ],
+                                onChanged: (value) {
+                                  setState(() {
+                                    maintenanceStatuses[calculatedIndex] = value!;
+                                  });
+                                },
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    TableCell(
-                      child: Center(
-                        child: TextField(
-                          controller: noteControllers[index],
-                          decoration: InputDecoration(
-                            hintText: 'Not Girin',
+                        ],
+                      );
+                    } else {
+                      return TableRow(
+                        children: [
+                          TableCell(
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Text(
+                                languageProvider.getLocalizedString('invalidIndex'),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              } else {
-                return TableRow(
-                  children: [
-                    TableCell(
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          'Invalid section',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.red,
+                          TableCell(
+                            child: Center(
+                              child: Text(
+                                languageProvider.getLocalizedString('invalid'),
+                                style: TextStyle(
+                                  color: Colors.red,
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    TableCell(
-                      child: Center(
-                        child: Text(
-                          'Invalid',
-                          style: TextStyle(
-                            color: Colors.red,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }
-            },
-          ),
-        ),
-      ],
+                        ],
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
   List<String> getDataForState(int state) {
-    switch (state) {
-      case 1:
-        return [
-          'Fonksiyonlar ve Kontrol 1',
-          'Fonksiyonlar ve Kontrol 2',
-          'Fonksiyonlar ve Kontrol 3',
-          'Fonksiyonlar ve Kontrol 4',
-        ];
-      case 2:
-        return [
-          'Platform Montaj 1',
-          'Platform Montaj 2',
-          'Platform Montaj 3',
-          'Platform Montaj 4',
-        ];
-      case 3:
-        return [
-          'Makaslar 1',
-          'Makaslar 2',
-          'Makaslar 3',
-          'Makaslar 4',
-          'Makaslar 5',
-          'Makaslar 6',
-        ];
-      case 4:
-        return [
-          'Genel 1',
-          'Genel 2',
-          'Genel 3',
-          'Genel 4',
-          'Genel 5',
-          'Genel 6',
-        ];
-      case 5:
-        return [
-          'Hidrolik 1',
-          'Hidrolik 2',
-          'Hidrolik 3',
-          'Hidrolik 4',
-          'Hidrolik 5',
-          'Hidrolik 6',
-        ];
-      case 6:
-        return [
-          'Elektrik 1',
-          'Elektrik 2',
-          'Elektrik 3',
-        ];
-      case 7:
-        return [
-          'Kılavuz ve Etiket 1',
-          'Kılavuz ve Etiket 2',
-        ];
-      case 8:
-        return [
-          "Şase 1",
-          'Şase 2',
-          'Şase 3',
-        ];
-      case 9:
-        return [
-          'Not 1',
-          'Not 2',
-          'Not 3',
-          'Not 4',
-          'Not 5',
-          'Not 6',
-          'Not 7',
-          'Not 8',
-          'Not 9',
-          'Not 10',
-        ];
-      default:
-        return [];
+    // Dil seçimine göre veri listeleri
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    final turkishData = {
+      1: [
+        'Fonksiyonlar ve Kontrol 1',
+        'Fonksiyonlar ve Kontrol 2',
+        'Fonksiyonlar ve Kontrol 3',
+        'Fonksiyonlar ve Kontrol 4',
+      ],
+      2: [
+        'Platform Montaj 1',
+        'Platform Montaj 2',
+        'Platform Montaj 3',
+        'Platform Montaj 4',
+      ],
+      3: [
+        'Makaslar 1',
+        'Makaslar 2',
+        'Makaslar 3',
+        'Makaslar 4',
+        'Makaslar 5',
+        'Makaslar 6',
+      ],
+      4: [
+        'Genel 1',
+        'Genel 2',
+        'Genel 3',
+        'Genel 4',
+        'Genel 5',
+        'Genel 6',
+      ],
+      5: [
+        'Hidrolik 1',
+        'Hidrolik 2',
+        'Hidrolik 3',
+        'Hidrolik 4',
+        'Hidrolik 5',
+        'Hidrolik 6',
+      ],
+      6: [
+        'Elektrik 1',
+        'Elektrik 2',
+        'Elektrik 3',
+      ],
+      7: [
+        'Kılavuz ve Etiket 1',
+        'Kılavuz ve Etiket 2',
+      ],
+      8: [
+        'Şase 1',
+        'Şase 2',
+        'Şase 3',
+      ],
+      9: [
+        'Not 1',
+        'Not 2',
+        'Not 3',
+        'Not 4',
+        'Not 5',
+        'Not 6',
+        'Not 7',
+        'Not 8',
+        'Not 9',
+        'Not 10',
+      ],
+    };
+
+    final englishData = {
+      1: [
+        'Functions and Control 1',
+        'Functions and Control 2',
+        'Functions and Control 3',
+        'Functions and Control 4',
+      ],
+      2: [
+        'Platform Assembly 1',
+        'Platform Assembly 2',
+        'Platform Assembly 3',
+        'Platform Assembly 4',
+      ],
+      3: [
+        'Scissors 1',
+        'Scissors 2',
+        'Scissors 3',
+        'Scissors 4',
+        'Scissors 5',
+        'Scissors 6',
+      ],
+      4: [
+        'General 1',
+        'General 2',
+        'General 3',
+        'General 4',
+        'General 5',
+        'General 6',
+      ],
+      5: [
+        'Hydraulic 1',
+        'Hydraulic 2',
+        'Hydraulic 3',
+        'Hydraulic 4',
+        'Hydraulic 5',
+        'Hydraulic 6',
+      ],
+      6: [
+        'Electric 1',
+        'Electric 2',
+        'Electric 3',
+      ],
+      7: [
+        'Guide and Label 1',
+        'Guide and Label 2',
+      ],
+      8: [
+        'Chassis 1',
+        'Chassis 2',
+        'Chassis 3',
+      ],
+      9: [
+        'Note 1',
+        'Note 2',
+        'Note 3',
+        'Note 4',
+        'Note 5',
+        'Note 6',
+        'Note 7',
+        'Note 8',
+        'Note 9',
+        'Note 10',
+      ],
+    };
+
+    // Dil seçimine göre uygun listeyi döndür
+    if (languageProvider.selectedLanguage == 'Türkçe') {
+      return turkishData[state] ?? [];
+    } else {
+      return englishData[state] ?? [];
     }
   }
 }
@@ -594,67 +729,55 @@ class MakinePopUp extends StatefulWidget {
 
 class _MakinePopUpState extends State<MakinePopUp> {
   String? _selectedMachineType;
-  TextEditingController _machineIdController = TextEditingController();
-  TextEditingController _machineNameController = TextEditingController();
+  final TextEditingController _machineIdController = TextEditingController();
+  final TextEditingController _machineNameController = TextEditingController();
   String name = '';
+  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
+  Barcode? result;
+  QRViewController? controller;
 
   @override
-  void initState() {
-    super.initState();
+  void dispose() {
+    controller?.stopCamera();
+    controller?.dispose();
+    _machineNameController.dispose();
+    _machineIdController.dispose();
+    super.dispose();
   }
 
-  Future<String> _getUsername() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
-
-    if (token == null) {
-      throw Exception('Token bulunamadı');
-    }
-
-    final url = Uri.parse('http://10.0.2.2:3000/api/users/list');
-    final response = await http.get(
-      url,
-      headers: {
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode == 200) {
-      final List<dynamic> userDataList = json.decode(response.body);
-      print(userDataList);
-
-      if (userDataList.isNotEmpty && userDataList[0] is Map<String, dynamic>) {
-        final userData = userDataList[0];
-        if (userData['username'] is String) {
-          return userData['username'];
-        } else {
-          throw Exception('Geçersiz kullanıcı verisi');
+  void _onQRViewCreated(QRViewController qrController) {
+    setState(() {
+      controller = qrController;
+    });
+    controller!.scannedDataStream.listen((scanData) {
+      setState(() {
+        result = scanData;
+        if (result != null) {
+          _machineNameController.text = result!.code!;
+          _machineIdController.text = result!.code!;
         }
-      } else {
-        throw Exception('Kullanıcı verisi bulunamadı');
-      }
-    } else {
-      throw Exception('Kullanıcı profili alınamadı: ${response.statusCode}');
-    }
+      });
+    });
   }
 
   Future<void> _addMachine() async {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     try {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? token = prefs.getString('token');
+      String? token = await storage.read(key: 'token');
       if (token == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lütfen oturum açın.')),
+          SnackBar(
+              content: Text(
+            languageProvider.selectedLanguage == 'Türkçe'
+                ? 'Lütfen Oturum Açın'
+                : 'Please Sign in',
+          )),
         );
         return;
       }
 
-      String username = await _getUsername();
-      print(username);
-      print(_machineIdController.text);
-      print(_machineNameController.text);
-      print(_selectedMachineType);
-      final url = Uri.parse('http://10.0.2.2:3000/api/machines/add');
+      String? userName = await _getUsername();
+      final url = Uri.parse('http://85.95.231.92:3001/api/machines/addMachine');
       final response = await http.post(
         url,
         headers: {
@@ -662,51 +785,67 @@ class _MakinePopUpState extends State<MakinePopUp> {
           'Content-Type': 'application/json',
         },
         body: json.encode({
-          'machineID': int.parse(_machineIdController.text),
+          'machineID': (_machineIdController.text),
           'machineName': _machineNameController.text,
           'machineType': _selectedMachineType,
-          'ownerUser': username,
+          'ownerUser': userName,
         }),
       );
-      print('HTTP Yanıt Kodu: ${response.statusCode}');
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Makine başarıyla eklendi.')),
+          SnackBar(
+              content: Text(
+            languageProvider.selectedLanguage == 'Türkçe'
+                ? 'Makine Başarıyla Eklendi'
+                : 'The Machine has Added Successfully',
+          )),
         );
       } else {
         final errorResponse = json.decode(response.body);
-        throw Exception('Makine ekleme başarısız oldu: ${errorResponse['error']}');
+        throw Exception(
+            'Makine ekleme başarısız oldu: ${errorResponse['error']}');
       }
     } catch (e) {
-      print('Error adding machine: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Makine ekleme hatası: $e')),
+        SnackBar(
+            content: Text(
+                '${languageProvider.selectedLanguage == 'Türkçe' ? 'Makine Ekleme Hatası' : 'Error Adding Machine'}: $e')),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return AlertDialog(
       title: Text(
-        'Makine Ekle',
+        languageProvider.selectedLanguage == 'Türkçe'
+            ? 'Makine Ekle'
+            : 'Add Machine',
         style: TextStyle(
-          fontSize: 20, // Yazı boyutu
-          color: Color(0xFF222F5A), // Yazı rengi
+          fontSize: 20,
+          color: Color(0xFF222F5A),
         ),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Makine Adı:'),
+          Text(languageProvider.selectedLanguage == 'Türkçe'
+              ? 'Makine Adı:'
+              : 'Machine Name:'),
           TextFormField(
             controller: _machineNameController,
             decoration: InputDecoration(
-              hintText: 'Makine Adı girin',
+              hintText: languageProvider.selectedLanguage == 'Türkçe'
+                  ? 'Makine Adı girin'
+                  : 'Enter Machine Name',
             ),
           ),
-          Text('Makine Türü:'),
+          Text(languageProvider.selectedLanguage == 'Türkçe'
+              ? 'Makine Türü:'
+              : 'Machine Type:'),
           DropdownButton<String>(
             value: _selectedMachineType,
             items: ['ESP', 'CSP'].map((String value) {
@@ -721,15 +860,28 @@ class _MakinePopUpState extends State<MakinePopUp> {
               });
             },
             isExpanded: true,
-            hint: Text('Seçiniz'),
+            hint: Text(languageProvider.selectedLanguage == 'Türkçe'
+                ? 'Seçiniz'
+                : 'Select'),
           ),
-          SizedBox(height: 10), // Boşluk ekleyin
-          Text('Makine ID:'),
+          SizedBox(height: 10),
+          Text(languageProvider.selectedLanguage == 'Türkçe'
+              ? 'Makine ID:'
+              : 'Machine ID:'),
           TextFormField(
             controller: _machineIdController,
             decoration: InputDecoration(
-              hintText: 'Makine ID girin',
+              hintText: languageProvider.selectedLanguage == 'Türkçe'
+                  ? 'Makine ID girin'
+                  : 'Enter Machine ID',
             ),
+          ),
+          SizedBox(height: 10),
+          IconButton(
+            icon: Icon(Icons.qr_code),
+            iconSize: 30.0, // İkonun boyutunu ayarlayabilirsiniz
+            color: Colors.black, // İkonun rengini ayarlayabilirsiniz
+            onPressed: () => _showQRScanner(context),
           ),
         ],
       ),
@@ -737,54 +889,144 @@ class _MakinePopUpState extends State<MakinePopUp> {
         TextButton(
           onPressed: _addMachine,
           child: Text(
-            'Ekle',
+            languageProvider.selectedLanguage == 'Türkçe' ? 'Ekle' : 'Add',
             style: TextStyle(
-              fontSize: 18, // Yazı boyutu
-              color: Color(0xFF222F5A), // Yazı rengi
+              fontSize: 18,
+              color: Color(0xFF222F5A),
             ),
           ),
         ),
       ],
     );
   }
+
+  void _showQRScanner(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            languageProvider.selectedLanguage == 'Türkçe'
+                ? 'QR Kod Tarayıcı'
+                : 'QR Code Scanner',
+          ),
+          content: Container(
+            width: 300,
+            height: 300,
+            child: QRView(
+              key: qrKey,
+              onQRViewCreated: _onQRViewCreated,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                controller?.stopCamera();
+                Navigator.of(context).pop();
+              },
+              child: Text(
+                languageProvider.selectedLanguage == 'Türkçe'
+                    ? 'Kapat'
+                    : 'Close',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _AnaSayfaState extends State<AnaSayfa> {
   late String _username = '';
-  late String _name = '';
   late String uid = '';
   late String role = '';
   String mail = '';
+  bool _isSubUser = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  void _changeLanguage(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(
+            languageProvider.selectedLanguage == 'Türkçe'
+                ? 'Dil Seçin'
+                : 'Choose the Language',
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: Text('Türkçe'),
+                leading: Radio<String>(
+                  value: 'Türkçe',
+                  groupValue: languageProvider.selectedLanguage,
+                  onChanged: (String? value) {
+                    languageProvider.changeLanguage(value!);
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ),
+              ListTile(
+                title: Text('İngilizce'),
+                leading: Radio<String>(
+                  value: 'İngilizce',
+                  groupValue: languageProvider.selectedLanguage,
+                  onChanged: (String? value) {
+                    languageProvider.changeLanguage(value!);
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: Text(
+                languageProvider.selectedLanguage == 'Türkçe'
+                    ? 'İptal'
+                    : 'Cancel',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _handleToken() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
+    String? token = await storage.read(key: 'token');
 
     if (token == null) {
       return;
     }
 
     bool tokenGecerli = await _validateToken(token);
-    print(tokenGecerli);
     if (!tokenGecerli) {
       // Token'ı yenile
       await _refreshToken();
       // Güncellenmiş token'ı al
-      token = prefs.getString('token');
+      token = await storage.read(key: 'token');
     }
     getUserRole();
   }
 
   Future<bool> _validateToken(String token) async {
-    final url = Uri.parse('http://10.0.2.2:3000/api/auth/validateToken');
+    final url = Uri.parse('http://85.95.231.92:3001/api/token/validateToken');
     final response = await http.get(
       url,
       headers: {
         'Authorization': 'Bearer $token',
       },
     );
-    print(response.statusCode);
     if (response.statusCode == 200) {
       // Token geçerli ise true döndür
       return true;
@@ -795,14 +1037,13 @@ class _AnaSayfaState extends State<AnaSayfa> {
   }
 
   Future<void> _refreshToken() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? oldToken = prefs.getString('token');
+    String? oldToken = await storage.read(key: 'token');
 
     if (oldToken == null) {
       throw Exception('Old token not found');
     }
 
-    final url = Uri.parse('http://10.0.2.2:3000/api/auth/refreshToken');
+    final url = Uri.parse('http://85.95.231.92:3001/api/token/refreshToken');
     final response = await http.post(
       url,
       headers: {
@@ -813,22 +1054,18 @@ class _AnaSayfaState extends State<AnaSayfa> {
       }),
     );
 
-    print('Response status: ${response.statusCode}');
-    print('Response body: ${response.body}');
-
     if (response.statusCode == 200) {
       // JSON yanıtını parsel
       final Map<String, dynamic> responseData = json.decode(response.body);
 
       // Yanıtı yazdırarak kontrol et
-      print('Response data: $responseData');
 
       // İç içe geçmiş token'ı al
       final newToken = responseData['token']['token'];
 
       if (newToken is String) {
         // Yeni token'ı SharedPreferences'e kaydet
-        await prefs.setString('token', newToken);
+        await storage.write(key: 'token', value: newToken);
       } else {
         throw Exception('Invalid token format');
       }
@@ -839,13 +1076,12 @@ class _AnaSayfaState extends State<AnaSayfa> {
 
   Future<void> getUserRole() async {
     try {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String email = prefs.getString('email') ?? '';
-      String token = prefs.getString('token') ?? '';
+      String? username = await storage.read(key: 'username');
+      String? token = await storage.read(key: 'token');
+      _username = (await _getUsername())!;
 
-      print('Retrieved email: $email and token: $token');
-
-      final url = Uri.parse('http://10.0.2.2:3000/api/users/getRole?email=$email');
+      final url = Uri.parse(
+          'http://85.95.231.92:3001/api/users/getRole?username=$username');
       final response = await http.get(
         url,
         headers: {
@@ -854,48 +1090,48 @@ class _AnaSayfaState extends State<AnaSayfa> {
         },
       );
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         setState(() {
           role = data['role'];
         });
-      } else {
-        print('Error: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Error: $e');
-    }
+      } else {}
+    } catch (e) {}
   }
 
   @override
   void initState() {
     super.initState();
     _handleToken();
+    _checkUserRole();
   }
 
-  String _getRoleBasedText() {
+  String _getRoleBasedText(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     switch (role) {
       case 'guest':
-        return 'Makine Ekle';
       case 'engineer':
-        return 'Bakım Kaydı Ekle';
+        return languageProvider.selectedLanguage == 'Türkçe'
+            ? 'Makine Ekle'
+            : 'Add Machine';
       case 'technician':
-        return 'Makine Ekle';
+        return languageProvider.selectedLanguage == 'Türkçe'
+            ? 'Bakım Kaydı Ekle'
+            : 'Add Maintenance Record';
       case 'sysop':
-        return 'Kullanıcı Ekle';
+        return languageProvider.selectedLanguage == 'Türkçe'
+            ? 'Kullanıcı Kayıtları'
+            : 'User Records';
       default:
         return '';
     }
   }
 
-  void _goScreenFromRole() {
+  void _goScreenFromRole(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     switch (role) {
       case 'guest':
-      case 'sysop':
-      case 'technician':
+      case 'engineer':
         showDialog(
           context: context,
           builder: (BuildContext context) {
@@ -903,11 +1139,20 @@ class _AnaSayfaState extends State<AnaSayfa> {
           },
         );
         break;
-      case 'engineer':
+      case 'technician':
         showDialog(
           context: context,
           builder: (BuildContext context) {
-            return MachineListScreen(id: '0',); // Özelleştirilmiş pop-up gösterilsin
+            return MachineListScreen(
+                id: '0'); // Özelleştirilmiş pop-up gösterilsin
+          },
+        );
+        break;
+      case 'sysop':
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AdminScreen(); // Özelleştirilmiş pop-up gösterilsin
           },
         );
         break;
@@ -916,12 +1161,24 @@ class _AnaSayfaState extends State<AnaSayfa> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: Text('Hata'),
-              content: Text('Geçersiz rol'),
+              title: Text(
+                languageProvider.selectedLanguage == 'Türkçe'
+                    ? 'Hata'
+                    : 'Error',
+              ),
+              content: Text(
+                languageProvider.selectedLanguage == 'Türkçe'
+                    ? 'Geçersiz rol'
+                    : 'Invalid role',
+              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Tamam'),
+                  child: Text(
+                    languageProvider.selectedLanguage == 'Türkçe'
+                        ? 'Tamam'
+                        : 'OK',
+                  ),
                 ),
               ],
             );
@@ -930,8 +1187,68 @@ class _AnaSayfaState extends State<AnaSayfa> {
     }
   }
 
+  Future<bool> logout() async {
+    String? token = await storage.read(key: 'token');
+    final url = Uri.parse('https://ondergrup.hidirektor.com.tr/api/v2/auth/logout');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+        body: jsonEncode({'token': token}),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        // Logout başarısız
+        return false;
+      }
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> _checkUserRole() async {
+    String? token = await storage.read(key: 'token');
+
+    if (token != null) {
+      final payload = _decodeJwt(token);
+      setState(() {
+        _isSubUser = payload['isSubUser'] ?? false;
+      });
+    }
+  }
+
+  Map<String, dynamic> _decodeJwt(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) {
+        throw Exception('Invalid token');
+      }
+
+      // Helper function to add padding if necessary
+      String addPadding(String base64String) {
+        final missingPadding = (4 - (base64String.length % 4)) % 4;
+        return base64String + '=' * missingPadding;
+      }
+
+      // Decode payload part
+      final payload = base64Url.decode(
+          addPadding(parts[1].replaceAll('-', '+').replaceAll('_', '/')));
+
+      return jsonDecode(utf8.decode(payload));
+    } catch (e) {
+      return {};
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return WillPopScope(
       onWillPop: () async {
         return false;
@@ -946,6 +1263,19 @@ class _AnaSayfaState extends State<AnaSayfa> {
               _scaffoldKey.currentState!.openDrawer();
             },
           ),
+          actions: [
+            TextButton.icon(
+              icon: Icon(
+                Icons.language,
+                color: Colors.black,
+              ),
+              label: Text(
+                languageProvider.selectedLanguage == 'Türkçe' ? 'Dil' : 'Language',
+                style: TextStyle(color: Colors.black),
+              ),
+              onPressed: () => _changeLanguage(context),
+            ),
+          ],
         ),
         body: Center(
           child: Container(
@@ -962,16 +1292,18 @@ class _AnaSayfaState extends State<AnaSayfa> {
                     children: [
                       IconButton(
                         icon: Icon(Icons.add),
-                        onPressed: _goScreenFromRole,
+                        onPressed: () => _goScreenFromRole(
+                            context), // context'i burada geçiyoruz
                       ),
                       SizedBox(height: 10),
                       Text(
-                        _getRoleBasedText(),
+                        _getRoleBasedText(
+                            context), // context'i burada geçiyoruz
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
-                      ),
+                      )
                     ],
                   ),
                 ),
@@ -991,13 +1323,44 @@ class _AnaSayfaState extends State<AnaSayfa> {
                 Align(
                   alignment: Alignment(0, -0.28),
                   child: Text(
-                    'Kayıtlı Makineler',
+                    languageProvider.selectedLanguage == 'Türkçe'
+                        ? 'Kayıtlı Makineler'
+                        : 'Registered Machines',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
+                Align(
+                  alignment: Alignment(0, 0.5),
+                  child: Stack(
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.supervised_user_circle),
+                        onPressed: _isSubUser
+                            ? null
+                            : () {
+                                Navigator.pushNamed(context, "/sub");
+                              },
+                      ),
+                    ],
+                  ),
+                ),
+                _isSubUser
+                    ? SizedBox.shrink()
+                    : Align(
+                        alignment: Alignment(0, 0.6),
+                        child: Text(
+                          languageProvider.selectedLanguage == 'Türkçe'
+                              ? 'Alt Kullanıcılar'
+                              : 'Sub Users',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
               ],
             ),
           ),
@@ -1025,8 +1388,8 @@ class _AnaSayfaState extends State<AnaSayfa> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         _username.isNotEmpty
-                            ? 'Merhaba, $_name'
-                            : 'Merhaba, Kullanıcı',
+                            ? '${languageProvider.getLocalizedString('greeting')}$_username'
+                            : '${languageProvider.getLocalizedString('greeting')}Kullanıcı',
                         style: TextStyle(
                           color: Colors.black,
                           fontSize: 12,
@@ -1043,7 +1406,7 @@ class _AnaSayfaState extends State<AnaSayfa> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Profil',
+                      languageProvider.getLocalizedString('profile'),
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 16,
@@ -1055,7 +1418,9 @@ class _AnaSayfaState extends State<AnaSayfa> {
                   ],
                 ),
                 onTap: () {
-                  Navigator.pushNamed(context, "/profil");
+                  if (!_isSubUser) {
+                    Navigator.pushNamed(context, "/profil");
+                  }
                 },
               ),
               ListTile(
@@ -1064,33 +1429,7 @@ class _AnaSayfaState extends State<AnaSayfa> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Bakım Geçmişi',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 16,
-                        fontFamily: 'Roboto',
-                        fontWeight: FontWeight.w300,
-                      ),
-                    ),
-                    Icon(Icons.arrow_forward_ios, color: Colors.black, size: 14),
-                  ],
-                ),
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext context) {
-                      return MachineListScreen(id: '1',); // Özelleştirilmiş pop-up gösterilsin
-                    },
-                  );
-                },
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.symmetric(horizontal: 20),
-                title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Hata Kayıtları',
+                      languageProvider.getLocalizedString('maintenanceHistory'),
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 16,
@@ -1105,7 +1444,9 @@ class _AnaSayfaState extends State<AnaSayfa> {
                   showDialog(
                     context: context,
                     builder: (BuildContext context) {
-                      return MachineListScreen(id: '2',); // Özelleştirilmiş pop-up gösterilsin
+                      return MachineListScreen(
+                        id: '1',
+                      );
                     },
                   );
                 },
@@ -1116,7 +1457,35 @@ class _AnaSayfaState extends State<AnaSayfa> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Belgeler',
+                      languageProvider.getLocalizedString('errorRecords'),
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 16,
+                        fontFamily: 'Roboto',
+                        fontWeight: FontWeight.w300,
+                      ),
+                    ),
+                    Icon(Icons.arrow_forward_ios, color: Colors.black, size: 14),
+                  ],
+                ),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return MachineListScreen(
+                        id: '2',
+                      );
+                    },
+                  );
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.symmetric(horizontal: 20),
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      languageProvider.getLocalizedString('documents'),
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 16,
@@ -1137,7 +1506,7 @@ class _AnaSayfaState extends State<AnaSayfa> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Ayarlar',
+                      languageProvider.getLocalizedString('settings'),
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 16,
@@ -1158,7 +1527,7 @@ class _AnaSayfaState extends State<AnaSayfa> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Çıkış Yap',
+                      languageProvider.getLocalizedString('logout'),
                       style: TextStyle(
                         color: Color(0xFFBE1522),
                         fontSize: 16,
@@ -1168,15 +1537,16 @@ class _AnaSayfaState extends State<AnaSayfa> {
                     ),
                   ],
                 ),
-                onTap: () {
+                onTap: () async {
                   try {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => LoginScreen()),
-                    );
-                  } catch (e) {
-                    print('Error navigating: $e');
-                  }
+                    bool success = await logout();
+                    if (success) {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (context) => LoginScreen()),
+                      );
+                    }
+                  } catch (e) {}
                 },
               ),
             ],

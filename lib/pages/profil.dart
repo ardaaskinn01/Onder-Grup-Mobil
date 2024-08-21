@@ -2,11 +2,17 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:onderliftmobil/pages/profiledit.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:provider/provider.dart';
+import 'package:onderliftmobil/pages/languageprovider.dart';
+
+final storage = FlutterSecureStorage();
 
 String? name = "";
 String? username = "";
 String? email = "";
+String? companyName = "";
+String? phoneNumber = "";
 
 class ProfilScreen extends StatefulWidget {
   @override
@@ -14,7 +20,6 @@ class ProfilScreen extends StatefulWidget {
 }
 
 class _ProfilScreenState extends State<ProfilScreen> {
-
   @override
   void initState() {
     super.initState();
@@ -22,29 +27,27 @@ class _ProfilScreenState extends State<ProfilScreen> {
   }
 
   Future<void> _getUserData() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
+    String? token = await storage.read(key: 'token');
 
     if (token != null) {
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:3000/api/users/list'),
+        Uri.parse('http://85.95.231.92:3001/api/users/userInfo'),
         headers: {
           'Authorization': 'Bearer $token',
         },
       );
       if (response.statusCode == 200) {
-        final List<dynamic> userData = json.decode(response.body);
+        final Map<String, dynamic> userData = json.decode(response.body);
         setState(() {
-          // Örnek olarak, ilk kullanıcıyı almak için indeksleme kullanılıyor
-          if (userData.isNotEmpty) {
-            name = userData[0]['name'];
-            email = userData[0]['email'];
-            username = userData[0]['username'];
-          }
+          name = userData['name'];
+          email = userData['email'];
+          username = userData['username'];
+          companyName = userData['companyname'];
+          phoneNumber = userData['phonenumber'];
         });
       } else {
         // Hata durumunu ele al
-        print('Failed to load user data${response.body}');
+        print('Failed to load user data: ${response.body}');
       }
     } else {
       print('Token is null');
@@ -53,9 +56,12 @@ class _ProfilScreenState extends State<ProfilScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // LanguageProvider'ı ekliyoruz
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Profile'),
+        title: Text(languageProvider.selectedLanguage == 'Türkçe' ? 'Profil' : 'Profile'),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,12 +72,31 @@ class _ProfilScreenState extends State<ProfilScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildProfileItem('Name', name),
-                  Divider(),
-                  _buildProfileItem('Email', email),
-                  Divider(),
-                  _buildProfileItem('Username', username),
-                  SizedBox(height: 20.0),
+                  _buildProfileItem(
+                    languageProvider.selectedLanguage == 'Türkçe' ? 'İsim' : 'Name',
+                    name,
+                  ),
+                  const Divider(),
+                  _buildProfileItem(
+                    languageProvider.selectedLanguage == 'Türkçe' ? 'E-mail' : 'Email',
+                    email,
+                  ),
+                  const Divider(),
+                  _buildProfileItem(
+                    languageProvider.selectedLanguage == 'Türkçe' ? 'Kullanıcı Adı' : 'Username',
+                    username,
+                  ),
+                  const Divider(),
+                  _buildProfileItem(
+                    languageProvider.selectedLanguage == 'Türkçe' ? 'Şirket Adı' : 'Company Name',
+                    companyName,
+                  ),
+                  const Divider(),
+                  _buildProfileItem(
+                    languageProvider.selectedLanguage == 'Türkçe' ? 'Telefon Numarası' : 'Phone Number',
+                    phoneNumber,
+                  ),
+                  const SizedBox(height: 20.0),
                 ],
               ),
             ),
@@ -90,12 +115,12 @@ class _ProfilScreenState extends State<ProfilScreen> {
                   _getUserData();
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Color(0xFF222F5A),
-                  padding: EdgeInsets.symmetric(horizontal: 60.0, vertical: 22.0),
+                  backgroundColor: const Color(0xFF222F5A),
+                  padding: const EdgeInsets.symmetric(horizontal: 60.0, vertical: 22.0),
                 ),
                 child: Text(
-                  'Profili Düzenle',
-                  style: TextStyle(
+                  languageProvider.selectedLanguage == 'Türkçe' ? 'Profili Düzenle' : 'Edit Profile',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.normal,
                     fontSize: 15,
@@ -112,19 +137,19 @@ class _ProfilScreenState extends State<ProfilScreen> {
   Widget _buildProfileItem(String title, String? value) {
     return Container(
       color: Colors.white,
-      padding: EdgeInsets.all(12.0),
+      padding: const EdgeInsets.all(12.0),
       child: ListTile(
-        leading: Icon(Icons.person),
+        leading: const Icon(Icons.person),
         title: Text(
           title,
-          style: TextStyle(
+          style: const TextStyle(
             fontWeight: FontWeight.bold,
             fontSize: 20.0,
           ),
         ),
         subtitle: Text(
           value ?? '',
-          style: TextStyle(fontSize: 18.0),
+          style: const TextStyle(fontSize: 18.0),
         ),
       ),
     );

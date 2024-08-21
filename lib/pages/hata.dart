@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:provider/provider.dart';
+import 'languageprovider.dart';
 
 class HataScreen extends StatefulWidget {
   final String machineID;
@@ -22,7 +24,7 @@ class _HataScreenState extends State<HataScreen> {
 
   Future<List<dynamic>> getMaintenanceRecords(String machineID) async {
     try {
-      final url = Uri.parse('http://10.0.2.2:3000/getMaintenanceRecords?machineID=$machineID');
+      final url = Uri.parse('http://85.95.231.92:3001/getMaintenanceRecords?machineID=$machineID');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -32,16 +34,16 @@ class _HataScreenState extends State<HataScreen> {
         throw Exception('Failed to load maintenance records');
       }
     } catch (e) {
-      print('Hata oluştu: $e');
       throw Exception('Error occurred while fetching maintenance records: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Bakım Kayıtları'),
+        title: Text(languageProvider.getLocalizedString('hata_kayitlari')),
       ),
       body: FutureBuilder<List<dynamic>>(
         future: _errorRecords,
@@ -50,10 +52,16 @@ class _HataScreenState extends State<HataScreen> {
             return Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Hata oluştu: ${snapshot.error}'));
+            return Center(
+              child: Text(
+                '${languageProvider.getLocalizedString('hata_olustu')}: ${snapshot.error}',
+              ),
+            );
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text('Hata kaydı bulunamadı'));
+            return Center(
+              child: Text(languageProvider.getLocalizedString('hata_kaydi_bulunamadi')),
+            );
           }
 
           final errorRecords = snapshot.data!;
@@ -64,7 +72,7 @@ class _HataScreenState extends State<HataScreen> {
             itemBuilder: (context, index) {
               final record = errorRecords[index];
               return ListTile(
-                title: Text(record['errorId'] ?? 'no id data'),
+                title: Text(record['errorId'] ?? languageProvider.getLocalizedString('no_id_data')),
               );
             },
           );

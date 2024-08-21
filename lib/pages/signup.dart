@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:onderliftmobil/pages/languageprovider.dart';
 
 class RegisterScreen extends StatefulWidget {
   @override
@@ -10,26 +12,31 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   String _name = '';
   String _mail = '';
+  String _phone = '';
+  String _company = '';
   String _username = '';
   String _password = '';
 
   Future<void> _handleRegister(BuildContext context) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
     if (_mail.isEmpty || _password.isEmpty || _name.isEmpty || _username.isEmpty) {
-      _showErrorDialog(context, 'Lütfen tüm alanları doldurun.');
+      _showErrorDialog(context, languageProvider.getLocalizedString('fill_all_fields'));
       return;
     }
 
     try {
-      final url = Uri.parse('http://10.0.2.2:3000/api/auth/registerUser');
+      final url = Uri.parse('https://ondergrup.hidirektor.com.tr/api/v2/auth/registerUser');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json; charset=UTF-8'},
         body: jsonEncode({
-          'name': _name,
-          'email': _mail,
-          'username': _username,
-          'password': _password,
-          'role': 'guest',
+          'userName': _username,
+          'nameSurname': _name,
+          'eMail': _mail,
+          'phoneNumber': _phone,
+          'companyName': _company,
+          'password': _password
         }),
       );
 
@@ -37,24 +44,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
         Navigator.pushNamed(context, "/login");
       } else {
         final responseBody = jsonDecode(response.body);
-        _showErrorDialog(context, 'Kullanıcı kaydedilirken bir hata oluştu: ${responseBody['error']}');
+        _showErrorDialog(context, '${languageProvider.getLocalizedString('error_registering_user')}: ${responseBody['error']}');
         print('HTTP Error Response: ${response.statusCode} - ${response.reasonPhrase}');
       }
     } catch (e) {
-      _showErrorDialog(context, 'Kullanıcı kaydedilirken bir hata oluştu: $e');
+      _showErrorDialog(context, '${languageProvider.getLocalizedString('error_registering_user')}: $e');
       print('Error during HTTP request: $e');
     }
   }
 
   void _showErrorDialog(BuildContext context, String message) {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Hata'),
+        title: Text(languageProvider.getLocalizedString('error')),
         content: Text(message),
         actions: <Widget>[
           TextButton(
-            child: Text('Tamam'),
+            child: Text(languageProvider.getLocalizedString('ok')),
             onPressed: () {
               Navigator.of(context).pop();
             },
@@ -67,12 +76,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return WillPopScope(
-      // Geri tuşuna basıldığında
       onWillPop: () async {
-        // Login ekranına geri dön
         Navigator.pushNamed(context, "/login");
-        // Geri tuşunun varsayılan işlevini devre dışı bırak
         return false;
       },
       child: Scaffold(
@@ -87,7 +95,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Stack(
               children: [
                 Align(
-                  alignment: Alignment(0, -0.6),
+                  alignment: Alignment(0, -0.75),
                   child: FractionallySizedBox(
                     widthFactor: 0.8,
                     heightFactor: 0.075,
@@ -98,7 +106,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         });
                       },
                       decoration: InputDecoration(
-                        hintText: 'İsim',
+                        hintText: languageProvider.getLocalizedString('name'),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(
+                            color: Colors.black,
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment(0, -0.55),
+                  child: FractionallySizedBox(
+                    widthFactor: 0.8,
+                    heightFactor: 0.075,
+                    child: TextField(
+                      onChanged: (value) {
+                        setState(() {
+                          _username = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: languageProvider.getLocalizedString('username'),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
                           borderSide: BorderSide(
@@ -118,11 +150,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: TextField(
                       onChanged: (value) {
                         setState(() {
-                          _username = value;
+                          _mail = value;
                         });
                       },
                       decoration: InputDecoration(
-                        hintText: 'Kullanıcı Adı',
+                        hintText: languageProvider.getLocalizedString('email'),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
                           borderSide: BorderSide(
@@ -135,18 +167,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 Align(
-                  alignment: Alignment(0, -0.1),
+                  alignment: Alignment(0, -0.15),
                   child: FractionallySizedBox(
                     widthFactor: 0.8,
                     heightFactor: 0.075,
                     child: TextField(
                       onChanged: (value) {
                         setState(() {
-                          _mail = value;
+                          _phone = value;
                         });
                       },
                       decoration: InputDecoration(
-                        hintText: 'E-Mail',
+                        hintText: languageProvider.getLocalizedString('phonenumber'),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
                           borderSide: BorderSide(
@@ -159,7 +191,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 Align(
-                  alignment: Alignment(0, 0.15),
+                  alignment: Alignment(0, 0.05),
+                  child: FractionallySizedBox(
+                    widthFactor: 0.8,
+                    heightFactor: 0.075,
+                    child: TextField(
+                      onChanged: (value) {
+                        setState(() {
+                          _company = value;
+                        });
+                      },
+                      decoration: InputDecoration(
+                        hintText: languageProvider.getLocalizedString('company'),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(
+                            color: Colors.black,
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment(0, 0.25),
                   child: FractionallySizedBox(
                     widthFactor: 0.8,
                     heightFactor: 0.075,
@@ -171,7 +227,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       },
                       obscureText: true,
                       decoration: InputDecoration(
-                        hintText: 'Şifre',
+                        hintText: languageProvider.getLocalizedString('password'),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
                           borderSide: BorderSide(
@@ -184,7 +240,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 Align(
-                  alignment: Alignment(0, 0.45),
+                  alignment: Alignment(0, 0.55),
                   child: ElevatedButton(
                     onPressed: () {
                       _handleRegister(context);
@@ -200,7 +256,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                     child: Text(
-                      'Kaydı Tamamla',
+                      languageProvider.getLocalizedString('complete_registration'),
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.normal,

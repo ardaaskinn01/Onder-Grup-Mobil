@@ -1,11 +1,16 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:provider/provider.dart';
+import 'package:onderliftmobil/pages/languageprovider.dart';
+
+final storage = FlutterSecureStorage();
 
 String? name = "";
-String? username = "";
+String? userID = "";
 String? email = "";
+String? phone = ""; // Telefon numarası alanı
 
 class ProfilEditScreen extends StatefulWidget {
   @override
@@ -17,7 +22,7 @@ class _ProfilEditState extends State<ProfilEditScreen> {
 
   TextEditingController _nameController = TextEditingController();
   TextEditingController _emailController = TextEditingController();
-  TextEditingController _usernameController = TextEditingController();
+  TextEditingController _phoneController = TextEditingController();
 
   @override
   void initState() {
@@ -26,133 +31,81 @@ class _ProfilEditState extends State<ProfilEditScreen> {
   }
 
   Future<void> _getUserData() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
+    String? token = await storage.read(key: 'token');
 
     if (token != null) {
       final response = await http.get(
-        Uri.parse('http://10.0.2.2:3000/api/users/list'),
+        Uri.parse('http://85.95.231.92:3001/api/users/userInfo'),
         headers: {
           'Authorization': 'Bearer $token',
         },
       );
       if (response.statusCode == 200) {
-        final List<dynamic> userData = json.decode(response.body);
+        final Map<String, dynamic> userData = json.decode(response.body);
         setState(() {
-          // Örnek olarak, ilk kullanıcıyı almak için indeksleme kullanılıyor
-          if (userData.isNotEmpty) {
-            name = userData[0]['name'];
-            email = userData[0]['email'];
-            username = userData[0]['username'];
+          name = userData['name'];
+          email = userData['email'];
+          phone = userData['phoneNumber']; // Telefon numarasını ekleyin
+          userID = userData['userID'];
 
-            // TextEditingController başlangıç değerlerini ayarlayın
-            _nameController.text = name!;
-            _emailController.text = email!;
-            _usernameController.text = username!;
-          }
+          _nameController.text = name!;
+          _emailController.text = email!;
+          _phoneController.text = phone!; // Telefon numarasını ekleyin
         });
       } else {
         // Hata durumunu ele al
-        print('Failed to load user data${response.body}');
+        print('Failed to load user data: ${response.body}');
       }
     } else {
       print('Token is null');
     }
   }
 
-  Future<void> _updateProfile() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
-
-    if (_nameController.text.isEmpty || _usernameController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Lütfen tüm alanları doldurun.'),
-      ));
-      return;
-    }
+  Future<void> _updateProfile(BuildContext context) async {
+    String? token = await storage.read(key: 'token');
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
 
     try {
       final response = await http.post(
-        Uri.parse('http://10.0.2.2:3000/api/users/update'),
+        Uri.parse('https://ondergrup.hidirektor.com.tr/api/v2/authorized/updateUser'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
         },
         body: jsonEncode({
-          'name': _nameController.text,
-          'username': _usernameController.text,
-          'email': _emailController.text,
+          'userID': userID,
+          'userData': {
+            'name': _nameController.text,
+            'email': _emailController.text,
+            'phoneNumber': _phoneController.text,
+          },
         }),
       );
 
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Profil başarıyla güncellendi.'),
+          content: Text(languageProvider.getLocalizedString('profile_updated_successfully')),
         ));
       } else {
         final errorResponse = json.decode(response.body);
-        throw Exception('Failed to update profile: ${errorResponse['error']}');
+        throw Exception('${languageProvider.getLocalizedString('profile_update_failed')} ${errorResponse['error']}');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Profil güncelleme hatası: $e'),
+        content: Text('${languageProvider.getLocalizedString('profile_update_failed')} $e'),
       ));
       print('Error updating profile: $e');
     }
   }
 
-  Future<void> _changePassword(String newPassword) async {
-    final String apiUrl = 'http://10.0.2.2:3000/api/users/updatePass';
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
-
-    if (token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Lütfen oturum açın.'),
-      ));
-      return;
-    }
-
-    try {
-      final response = await http.post(
-        Uri.parse(apiUrl),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'newPassword': newPassword,
-          'email': _emailController.text,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        if (responseData['message'] == 'Password changed successfully') {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Parola başarıyla güncellendi.'),
-          ));
-        } else {
-          throw Exception('Parola güncelleme başarısız oldu: ${responseData['error']}');
-        }
-      } else {
-        final errorResponse = json.decode(response.body);
-        throw Exception('Parola güncelleme başarısız oldu: ${errorResponse['error']}');
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Parola güncelleme hatası: $e'),
-      ));
-      print('Error changing password: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       key: _scaffoldKey,
       appBar: AppBar(
-        title: Text('Edit'),
+        title: Text(languageProvider.getLocalizedString('edit')),
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,13 +116,13 @@ class _ProfilEditState extends State<ProfilEditScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  _buildProfileItem('Name', _nameController),
-                  _buildProfileItem('Email', _emailController, editable: false),
-                  _buildProfileItem('Username', _usernameController),
+                  _buildProfileItem(languageProvider.getLocalizedString('name'), _nameController),
+                  _buildProfileItem(languageProvider.getLocalizedString('email'), _emailController),
+                  _buildProfileItem(languageProvider.getLocalizedString('phoneNumber'), _phoneController), // Telefon numarası alanı
                   Spacer(),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 0.0),
-                    child: _buildChangePasswordButton(),
+                    child: _buildChangePasswordButton(languageProvider),
                   ),
                 ],
               ),
@@ -210,7 +163,7 @@ class _ProfilEditState extends State<ProfilEditScreen> {
                 context: context,
                 builder: (BuildContext context) {
                   return AlertDialog(
-                    title: Text('Edit $title'),
+                    title: Text(title),
                     content: TextField(
                       controller: controller,
                     ),
@@ -218,15 +171,15 @@ class _ProfilEditState extends State<ProfilEditScreen> {
                       TextButton(
                         onPressed: () {
                           Navigator.of(context).pop();
-                          _updateProfile();
+                          _updateProfile(context);
                         },
-                        child: Text('Kaydet'),
+                        child: Text(Provider.of<LanguageProvider>(context).getLocalizedString('save')),
                       ),
                       TextButton(
                         onPressed: () {
                           Navigator.of(context).pop();
                         },
-                        child: Text('İptal'),
+                        child: Text(Provider.of<LanguageProvider>(context).getLocalizedString('cancel')),
                       ),
                     ],
                   );
@@ -238,7 +191,7 @@ class _ProfilEditState extends State<ProfilEditScreen> {
               padding: EdgeInsets.symmetric(horizontal: 25.0, vertical: 10.0),
             ),
             child: Text(
-              'Düzenle',
+              Provider.of<LanguageProvider>(context).getLocalizedString('edit'),
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.normal,
@@ -252,36 +205,50 @@ class _ProfilEditState extends State<ProfilEditScreen> {
     );
   }
 
-  Widget _buildChangePasswordButton() {
+  Widget _buildChangePasswordButton(LanguageProvider languageProvider) {
     return ElevatedButton(
       onPressed: () {
         showDialog(
           context: context,
           builder: (BuildContext context) {
             TextEditingController newPasswordController = TextEditingController();
+            TextEditingController oldPasswordController = TextEditingController();
 
             return AlertDialog(
-              title: Text('Parola Değiştir'),
-              content: TextField(
-                controller: newPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'Yeni Parola',
-                ),
+              title: Text(languageProvider.getLocalizedString('change_password')),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  TextField(
+                    controller: oldPasswordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: languageProvider.getLocalizedString('old_password'),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  TextField(
+                    controller: newPasswordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: languageProvider.getLocalizedString('new_password'),
+                    ),
+                  ),
+                ],
               ),
               actions: <Widget>[
                 TextButton(
                   onPressed: () async {
-                    await _changePassword(newPasswordController.text);
+                    await _changePassword(context, oldPasswordController.text, newPasswordController.text);
                     Navigator.of(context).pop();
                   },
-                  child: Text('Kaydet'),
+                  child: Text(languageProvider.getLocalizedString('save')),
                 ),
                 TextButton(
                   onPressed: () {
                     Navigator.of(context).pop();
                   },
-                  child: Text('İptal'),
+                  child: Text(languageProvider.getLocalizedString('cancel')),
                 ),
               ],
             );
@@ -290,16 +257,49 @@ class _ProfilEditState extends State<ProfilEditScreen> {
       },
       style: ElevatedButton.styleFrom(
         backgroundColor: Color(0xFF222F5A),
-        padding: EdgeInsets.symmetric(horizontal: 30.0, vertical: 15.0),
+        padding: EdgeInsets.symmetric(horizontal: 50.0, vertical: 20.0),
       ),
       child: Text(
-        'Parola Değiştir',
+        languageProvider.getLocalizedString('change_password'),
         style: TextStyle(
           color: Colors.white,
-          fontWeight: FontWeight.normal,
-          fontSize: 15,
+          fontWeight: FontWeight.bold,
+          fontSize: 20,
         ),
       ),
     );
+  }
+
+  Future<void> _changePassword(BuildContext context, String oldPassword, String newPassword) async {
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+    String? token = await storage.read(key: 'token');
+
+    try {
+      final response = await http.post(
+        Uri.parse('https://ondergrup.hidirektor.com.tr/api/v2/authorized/changePassword'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'oldPassword': oldPassword,
+          'newPassword': newPassword,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(languageProvider.getLocalizedString('password_updated_successfully')),
+        ));
+      } else {
+        final errorResponse = json.decode(response.body);
+        throw Exception('${languageProvider.getLocalizedString('password_update_failed')} ${errorResponse['error']}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${languageProvider.getLocalizedString('password_update_failed')} $e'),
+      ));
+      print('Error updating password: $e');
+    }
   }
 }

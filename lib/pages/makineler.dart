@@ -1,10 +1,15 @@
 import 'dart:convert';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'bakim.dart';
 import 'hata.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:provider/provider.dart';
+import 'package:onderliftmobil/pages/languageprovider.dart';
+
+final storage = const FlutterSecureStorage();
+
+late String role = '';
 
 class MakinelerScreen extends StatefulWidget {
   @override
@@ -13,21 +18,52 @@ class MakinelerScreen extends StatefulWidget {
 }
 
 class _MakinelerScreenState extends State<MakinelerScreen> {
-  @override
+
   void initState() {
     super.initState();
+    getUserRole();
   }
 
-  Future<List<dynamic>> _getMachines() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
+  Future<void> getUserRole() async {
     try {
-      final url = Uri.parse(
-          'http://10.0.2.2:3000/api/machines/list'); // Express.js server adresine göre güncelleyin
+      String? username = await storage.read(key: 'username');
+      String? token = await storage.read(key: 'token');
+      final url = Uri.parse('http://85.95.231.92:3001/api/users/getRole?username=$username');
       final response = await http.get(
         url,
         headers: {
           'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          role = data['role'];
+        });
+      } else {
+        print('Error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  Future<List<dynamic>> _getMachines() async {
+    String? token = await storage.read(key: 'token');
+    try {
+      Uri url;
+      if (role == 'sysop' || role == 'technician') {
+        url = Uri.parse('http://85.95.231.92:3001/api/machines/getAllMachines');
+      } else {
+        url = Uri.parse('http://85.95.231.92:3001/api/machines/getMachines');
+      }
+      final response = await http.get(
+        url,
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
         },
       );
       print(response.body);
@@ -37,17 +73,15 @@ class _MakinelerScreenState extends State<MakinelerScreen> {
         throw Exception('Failed to load machines');
       }
     } catch (e) {
-      print('Error fetching machines: $e');
       throw Exception('Error occurred while fetching machines: $e');
     }
   }
 
   Future<void> deleteMachine(String machineID) async {
-    final prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
+    String? token = await storage.read(key: 'token');
     try {
       final url = Uri.parse(
-          'http://10.0.2.2:3000/api/machines/delete?machineID=$machineID'); // Yeni backend URL'sini kullanın
+          'http://85.95.231.92:3001/api/machines/delete?machineID=$machineID'); // Yeni backend URL'sini kullanın
       final response = await http.delete(
         url,
         headers: <String, String>{
@@ -68,6 +102,8 @@ class _MakinelerScreenState extends State<MakinelerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       appBar: null,
       body: Center(
@@ -83,34 +119,66 @@ class _MakinelerScreenState extends State<MakinelerScreen> {
                     FutureBuilder(
                       future: _getMachines(),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
-                          return CircularProgressIndicator();
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const CircularProgressIndicator();
                         }
                         if (!snapshot.hasData) {
-                          return Text('Veri bulunamadı');
+                          return Text(
+                            languageProvider.selectedLanguage == 'Türkçe'
+                                ? 'Veri bulunamadı'
+                                : 'No data found',
+                          );
                         }
                         var machines = snapshot.data as List;
                         return Padding(
-                          padding: EdgeInsets.only(
-                              top: 20.0), // Dikeyde 20 birimlik boşluk ekler
+                          padding: const EdgeInsets.only(top: 20.0),
                           child: SingleChildScrollView(
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: DataTable(
                                 columnSpacing: 35,
                                 columns: [
-                                  DataColumn(label: Text('   ID')),
-                                  DataColumn(label: Text('İsim')),
-                                  DataColumn(label: Text('Tür')),
-                                  DataColumn(label: Text(' İncele')),
-                                  DataColumn(label: Text('    Sil')),
+                                  DataColumn(
+                                    label: Text(
+                                      languageProvider.selectedLanguage == 'Türkçe'
+                                          ? '  ID'
+                                          : '  ID',
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      languageProvider.selectedLanguage == 'Türkçe'
+                                          ? ' İsim'
+                                          : ' Name',
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      languageProvider.selectedLanguage == 'Türkçe'
+                                          ? 'Tür'
+                                          : 'Type',
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      languageProvider.selectedLanguage == 'Türkçe'
+                                          ? ' İncele'
+                                          : ' View',
+                                    ),
+                                  ),
+                                  DataColumn(
+                                    label: Text(
+                                      languageProvider.selectedLanguage == 'Türkçe'
+                                          ? '    Sil'
+                                          : ' Delete',
+                                    ),
+                                  ),
                                 ],
                                 rows: machines.map((machine) {
                                   return DataRow(cells: [
                                     DataCell(
                                       Text(
-                                        machine['machineID'],
+                                        machine['machineID'].toString(),
                                         textAlign: TextAlign.center,
                                       ),
                                     ),
@@ -128,7 +196,7 @@ class _MakinelerScreenState extends State<MakinelerScreen> {
                                     ),
                                     DataCell(
                                       IconButton(
-                                        icon: Icon(Icons.visibility,
+                                        icon: const Icon(Icons.visibility,
                                             color: Color(0xFF222F5A)),
                                         onPressed: () {
                                           Navigator.push(
@@ -137,7 +205,7 @@ class _MakinelerScreenState extends State<MakinelerScreen> {
                                               builder: (context) =>
                                                   MachineScreen(
                                                       machineID:
-                                                          machine['machineID']),
+                                                      machine['machineID']),
                                             ),
                                           );
                                         },
@@ -145,14 +213,29 @@ class _MakinelerScreenState extends State<MakinelerScreen> {
                                     ),
                                     DataCell(
                                       IconButton(
-                                        icon: Icon(Icons.delete,
+                                        icon: const Icon(Icons.delete,
                                             color: Color(0xFFBE1522)),
-                                        onPressed: () async {
-                                          var machineIdToDelete =
-                                              machine['machineID'];
-                                          await deleteMachine(
-                                              machineIdToDelete);
-                                          setState(() {}); // UI'yı güncelle
+                                        onPressed: () {
+                                          if (role == 'sysop' ||
+                                              role == 'engineer') {
+                                            var machineIdToDelete =
+                                            machine['machineID'].toString();
+                                            deleteMachine(machineIdToDelete);
+                                            setState(() {}); // UI'yı güncelle
+                                          } else {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  languageProvider
+                                                      .selectedLanguage ==
+                                                      'Türkçe'
+                                                      ? 'Yetkiniz yok'
+                                                      : 'You do not have permission',
+                                                ),
+                                              ),
+                                            );
+                                          }
                                         },
                                       ),
                                     ),
@@ -178,13 +261,12 @@ class _MakinelerScreenState extends State<MakinelerScreen> {
 class MachineScreen extends StatefulWidget {
   @override
   _MachineScreenState createState() => _MachineScreenState();
-  final String machineID;
+  final int machineID;
 
   MachineScreen({required this.machineID});
 }
 
 class _MachineScreenState extends State<MachineScreen> {
-  late User receivedUser;
 
   String eepromData1 = 'eepromData38';
   String eepromData2 = 'eepromData39';
@@ -208,11 +290,10 @@ class _MachineScreenState extends State<MachineScreen> {
   }
 
   Future<void> _getMachineDetails() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token');
+    String? token = await storage.read(key: 'token');
     try {
       final url = Uri.parse(
-          'http://10.0.2.2:3000/api/machines/details?machineID=${widget.machineID}');
+          'http://85.95.231.92:3001/api/machines/details?machineID=${widget.machineID}');
       final response = await http.get(
         url,
         headers: {
@@ -225,7 +306,7 @@ class _MachineScreenState extends State<MachineScreen> {
         final data = json.decode(response.body);
         setState(() {
           machineName = data['machineName'];
-          machineID = data['machineID'];
+          machineID = data['machineID'].toString();
           machineType = data['machineType'];
           machineDetails = data;
         });
@@ -234,7 +315,6 @@ class _MachineScreenState extends State<MachineScreen> {
             'Makine detayları alınamadı, Hata Kodu: ${response.statusCode}');
       }
     } catch (e) {
-      print('Hata oluştu: $e');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('Makine detayları alınırken hata oluştu: $e'),
       ));
@@ -242,47 +322,59 @@ class _MachineScreenState extends State<MachineScreen> {
   }
 
   Future<void> _editDetail(String key, String currentValue) async {
-    TextEditingController controller =
-        TextEditingController(text: currentValue);
+    TextEditingController controller = TextEditingController(text: currentValue);
+    final languageProvider = Provider.of<LanguageProvider>(context, listen: false);
+
     await showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text('Edit $key'),
+          title: Text(
+            '${languageProvider.selectedLanguage == 'Türkçe' ? 'Düzenle' : 'Edit'} $key',
+          ),
           content: TextField(
             controller: controller,
-            decoration: InputDecoration(hintText: 'Enter new value'),
+            decoration: InputDecoration(
+              hintText: languageProvider.selectedLanguage == 'Türkçe'
+                  ? 'Yeni değeri girin'
+                  : 'Enter new value',
+            ),
           ),
           actions: <Widget>[
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
               },
-              child: Text('Cancel'),
+              child: Text(
+                languageProvider.selectedLanguage == 'Türkçe' ? 'İptal' : 'Cancel',
+              ),
             ),
             TextButton(
               onPressed: () async {
-                final prefs = await SharedPreferences.getInstance();
-                String? token = prefs.getString('token');
+                String? token = await storage.read(key: 'token');
                 String newValue = controller.text;
 
                 // Kontroller
-                if (widget.machineID.isEmpty || key.isEmpty || newValue.isEmpty || token == null) {
+                if (widget.machineID.isNaN ||
+                    key.isEmpty ||
+                    newValue.isEmpty ||
+                    token == null) {
                   print('Error: One of the values is empty or token is missing.');
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Required fields are missing or token is null.'),
+                      content: Text(
+                        languageProvider.selectedLanguage == 'Türkçe'
+                            ? 'Gerekli alanlar eksik veya token yok.'
+                            : 'Required fields are missing or token is null.',
+                      ),
                     ),
                   );
                   return;
                 }
 
-                print('Machine ID: ${widget.machineID}');
-                print('Key: $key');
-                print('New Value: $newValue');
-
                 try {
-                  final url = Uri.parse('http://10.0.2.2:3000/api/machines/update');
+                  final url = Uri.parse(
+                      'https://ondergrup.hidirektor.com.tr/api/v2/machine/updateMachine');
                   final response = await http.put(
                     url,
                     headers: {
@@ -291,8 +383,11 @@ class _MachineScreenState extends State<MachineScreen> {
                     },
                     body: json.encode({
                       'machineID': widget.machineID,
-                      'key': key,
-                      'value': newValue,
+                      'updateData': [
+                        {
+                          key: newValue,
+                        },
+                      ],
                     }),
                   );
 
@@ -310,12 +405,18 @@ class _MachineScreenState extends State<MachineScreen> {
                   print('Error updating machine: $e');
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Failed to update machine: $e'),
+                      content: Text(
+                        languageProvider.selectedLanguage == 'Türkçe'
+                            ? 'Makine güncellenemedi: $e'
+                            : 'Failed to update machine: $e',
+                      ),
                     ),
                   );
                 }
               },
-              child: Text('Save'),
+              child: Text(
+                languageProvider.selectedLanguage == 'Türkçe' ? 'Kaydet' : 'Save',
+              ),
             ),
           ],
         );
@@ -325,119 +426,127 @@ class _MachineScreenState extends State<MachineScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // LanguageProvider'ı dinamik dil değişikliği için ekliyoruz
+    final languageProvider = Provider.of<LanguageProvider>(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Machine'),
+        title: Text(languageProvider.selectedLanguage == 'Türkçe' ? 'Makine' : 'Machine'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: machineDetails.isEmpty
-            ? Center(child: CircularProgressIndicator())
+            ? const Center(child: CircularProgressIndicator())
             : Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              machineName,
+              style: const TextStyle(
+                fontSize: 24.0,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            Text(
+              machineType,
+              style: TextStyle(
+                fontSize: 18.0,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10.0),
+            SizedBox(
+              height: 60.0,
+              child: Row(
                 children: [
-                  Text(
-                    machineName,
-                    style: TextStyle(
-                      fontSize: 24.0,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  Text(
-                    machineType,
-                    style: TextStyle(
-                      fontSize: 18.0,
-                      color: Colors.grey[600],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 10.0),
-                  SizedBox(
-                    height: 60.0,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      HataScreen(machineID: widget.machineID),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              color: Color(0xFFBE1522),
-                              padding: EdgeInsets.all(0.0),
-                              child: Center(
-                                child: ListTile(
-                                  title: Text(
-                                    'Machine Error Log',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14.0,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 18.0),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      BakimScreen(machineID: widget.machineID),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              color: Color(0xFF222F5A),
-                              padding: EdgeInsets.all(0.0),
-                              child: Center(
-                                child: ListTile(
-                                  title: Text(
-                                    'Machine Maintenance Log',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14.0,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 20.0),
                   Expanded(
-                    child: ListView(
-                      children: machineDetails.entries.map((entry) {
-                        return ListTile(
-                          title: Text(entry.key),
-                          subtitle: Text(entry.value.toString()),
-                          trailing: IconButton(
-                            icon: Icon(Icons.edit),
-                            onPressed: () {
-                              _editDetail(entry.key, entry.value.toString());
-                            },
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => HataScreen(machineID: widget.machineID.toString()),
                           ),
                         );
-                      }).toList(),
+                      },
+                      child: Container(
+                        color: const Color(0xFFBE1522),
+                        padding: const EdgeInsets.all(0.0),
+                        child: Center(
+                          child: ListTile(
+                            title: Text(
+                              languageProvider.selectedLanguage == 'Türkçe'
+                                  ? 'Makine Hata Kaydı'
+                                  : 'Machine Error Log',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14.0,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 18.0),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => BakimScreen(machineID: widget.machineID.toString()),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        color: const Color(0xFF222F5A),
+                        padding: const EdgeInsets.all(0.0),
+                        child: Center(
+                          child: ListTile(
+                            title: Text(
+                              languageProvider.selectedLanguage == 'Türkçe'
+                                  ? 'Makine Bakım Kaydı'
+                                  : 'Machine Maintenance Log',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14.0,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 20.0),
+            Expanded(
+              child: ListView(
+                children: machineDetails.entries.map((entry) {
+                  return ListTile(
+                    title: Text(entry.key),
+                    subtitle: Text(entry.value.toString()),
+                    trailing: (role == 'engineer' || role == 'sysop') &&
+                        !(role == 'engineer' && entry.key == 'ownerUser')
+                        ? IconButton(
+                      icon: const Icon(Icons.edit),
+                      onPressed: () {
+                        _editDetail(entry.key, entry.value.toString());
+                      },
+                    )
+                        : null,
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

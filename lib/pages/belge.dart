@@ -1,8 +1,7 @@
-import 'dart:io';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:provider/provider.dart';
+import 'languageprovider.dart';
 
 class BelgeScreen extends StatefulWidget {
   @override
@@ -21,9 +20,10 @@ class _BelgeScreenState extends State<BelgeScreen> {
 class DocumentsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Documents'),
+        title: Text(languageProvider.getLocalizedString('guide')),
       ),
       body: Center(
         child: Padding(
@@ -43,7 +43,7 @@ class DocumentsScreen extends StatelessWidget {
                   padding: EdgeInsets.symmetric(vertical: 20), backgroundColor: Colors.grey, // Buton rengi
                 ),
                 child: Text(
-                  'KVKK Politikası',
+                  languageProvider.getLocalizedString('documents'),
                   style: TextStyle(
                     fontSize: 18, // Yazı boyutu
                     color: Color(0xFF222F5A), // Yazı rengi
@@ -62,7 +62,7 @@ class DocumentsScreen extends StatelessWidget {
                   padding: EdgeInsets.symmetric(vertical: 20), backgroundColor: Colors.grey, // Buton rengi
                 ),
                 child: Text(
-                  'Gizlilik Politikası',
+                  languageProvider.getLocalizedString('privacy_policy'),
                   style: TextStyle(
                     fontSize: 18, // Yazı boyutu
                     color: Color(0xFF222F5A), // Yazı rengi
@@ -81,7 +81,7 @@ class DocumentsScreen extends StatelessWidget {
                   padding: EdgeInsets.symmetric(vertical: 20), backgroundColor: Colors.grey, // Buton rengi
                 ),
                 child: Text(
-                  'Veri Saklama ve İmha',
+                  languageProvider.getLocalizedString('data_destruction'),
                   style: TextStyle(
                     fontSize: 18, // Yazı boyutu
                     color: Color(0xFF222F5A), // Yazı rengi
@@ -100,7 +100,7 @@ class DocumentsScreen extends StatelessWidget {
                   padding: EdgeInsets.symmetric(vertical: 20), backgroundColor: Colors.grey, // Buton rengi
                 ),
                 child: Text(
-                  'Kullanma Kılavuzu',
+                  languageProvider.getLocalizedString('user_manual'),
                   style: TextStyle(
                     fontSize: 18, // Yazı boyutu
                     color: Color(0xFF222F5A), // Yazı rengi
@@ -125,9 +125,10 @@ class _KVKKScreenState extends State<KVKKScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('KVKK'),
+        title: Text(languageProvider.getLocalizedString('kvkk')), // Dil desteği eklendi
         leading: IconButton(
           icon: Icon(Icons.close),
           onPressed: () {
@@ -179,9 +180,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Gizlilik Politikası'),
+        title: Text(languageProvider.getLocalizedString('privacy')),
         leading: IconButton(
           icon: Icon(Icons.close),
           onPressed: () {
@@ -233,9 +235,10 @@ class _DestructionScreenState extends State<DestructionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Veri Saklama ve İmha Politikası'),
+        title: Text(languageProvider.getLocalizedString('data_destruction_title')),
         leading: IconButton(
           icon: Icon(Icons.close),
           onPressed: () {
@@ -287,9 +290,10 @@ class _ManualScreenState extends State<ManualScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final languageProvider = Provider.of<LanguageProvider>(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Kılavuz'),
+        title: Text(languageProvider.getLocalizedString('guide')),
         leading: IconButton(
           icon: Icon(Icons.close),
           onPressed: () {
